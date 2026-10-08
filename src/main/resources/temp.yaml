@@ -1,0 +1,338 @@
+name: task-manager-api
+
+description: >
+  A clean task management REST API where authenticated users can create projects
+  and manage tasks inside those projects. Users can create projects, add tasks,
+  update task status, assign tasks to users, and retrieve their projects and tasks.
+
+pythonVersion: "3.12"
+
+services:
+  - task_management
+
+entities:
+  - name: User
+    fields:
+      - name: id
+        type: int
+        primaryKey: true
+        nullable: false
+        unique: true
+        defaultValue: null
+      - name: name
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+      - name: email
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: true
+        defaultValue: null
+      - name: password
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+    relationships:
+      - type: one_to_many
+        target: Project
+        field: projects
+      - type: one_to_many
+        target: Task
+        field: tasks
+
+  - name: Project
+    fields:
+      - name: id
+        type: int
+        primaryKey: true
+        nullable: false
+        unique: true
+        defaultValue: null
+      - name: name
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+      - name: description
+        type: str
+        primaryKey: false
+        nullable: true
+        unique: false
+        defaultValue: null
+      - name: owner_id
+        type: int
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+    relationships:
+      - type: many_to_one
+        target: User
+        field: owner
+      - type: one_to_many
+        target: Task
+        field: tasks
+
+  - name: Task
+    fields:
+      - name: id
+        type: int
+        primaryKey: true
+        nullable: false
+        unique: true
+        defaultValue: null
+      - name: title
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+      - name: description
+        type: str
+        primaryKey: false
+        nullable: true
+        unique: false
+        defaultValue: null
+      - name: status
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: "pending"
+      - name: project_id
+        type: int
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+      - name: assigned_to
+        type: int
+        primaryKey: false
+        nullable: true
+        unique: false
+        defaultValue: null
+    relationships:
+      - type: many_to_one
+        target: Project
+        field: project
+      - type: many_to_one
+        target: User
+        field: assignee
+
+routers:
+  - name: auth
+    prefix: /auth
+    authRequired: false
+    dependsOn: []
+    endpoints:
+      - method: POST
+        path: /register
+        handler: register_user
+        requestBody: UserCreate
+        responseBody: UserResponse
+      - method: POST
+        path: /login
+        handler: login_user
+        requestBody: UserLogin
+        responseBody: TokenResponse
+
+  - name: projects
+    prefix: /projects
+    authRequired: true
+    dependsOn:
+      - auth
+    endpoints:
+      - method: POST
+        path: /
+        handler: create_project
+        requestBody: ProjectCreate
+        responseBody: ProjectResponse
+      - method: GET
+        path: /
+        handler: list_projects
+        requestBody: null
+        responseBody: ProjectListResponse
+      - method: GET
+        path: /{project_id}
+        handler: get_project
+        requestBody: null
+        responseBody: ProjectResponse
+      - method: DELETE
+        path: /{project_id}
+        handler: delete_project
+        requestBody: null
+        responseBody: null
+
+  - name: tasks
+    prefix: /tasks
+    authRequired: true
+    dependsOn:
+      - auth
+      - projects
+    endpoints:
+      - method: POST
+        path: /
+        handler: create_task
+        requestBody: TaskCreate
+        responseBody: TaskResponse
+      - method: GET
+        path: /
+        handler: list_tasks
+        requestBody: null
+        responseBody: TaskListResponse
+      - method: GET
+        path: /{task_id}
+        handler: get_task
+        requestBody: null
+        responseBody: TaskResponse
+      - method: PATCH
+        path: /{task_id}
+        handler: update_task
+        requestBody: TaskUpdate
+        responseBody: TaskResponse
+      - method: DELETE
+        path: /{task_id}
+        handler: delete_task
+        requestBody: null
+        responseBody: null
+
+serviceLogics:
+  - name: create_project
+    dependsOn: []
+    methods:
+      - name: create_project
+        params:
+          - name: project_data
+            type: ProjectCreate
+          - name: current_user
+            type: User
+        returns: Project
+        intent: Create a project owned by the current authenticated user.
+
+  - name: list_projects
+    dependsOn:
+      - create_project
+    methods:
+      - name: list_projects
+        params:
+          - name: current_user
+            type: User
+        returns: list[Project]
+        intent: Return all projects owned by the current authenticated user.
+
+  - name: get_project
+    dependsOn:
+      - create_project
+    methods:
+      - name: get_project
+        params:
+          - name: project_id
+            type: int
+          - name: current_user
+            type: User
+        returns: Project
+        intent: Get a specific project by ID owned by the current authenticated user.
+
+  - name: delete_project
+    dependsOn:
+      - create_project
+    methods:
+      - name: delete_project
+        params:
+          - name: project_id
+            type: int
+          - name: current_user
+            type: User
+        returns: None
+        intent: Delete a project by ID owned by the current authenticated user.
+
+  - name: create_task
+    dependsOn:
+      - create_project
+    methods:
+      - name: create_task
+        params:
+          - name: task_data
+            type: TaskCreate
+          - name: current_user
+            type: User
+        returns: Task
+        intent: Create a task inside a project owned by the current authenticated user.
+
+  - name: list_tasks
+    dependsOn:
+      - create_task
+    methods:
+      - name: list_tasks
+        params:
+          - name: current_user
+            type: User
+        returns: list[Task]
+        intent: Return all tasks in projects owned by or assigned to the current authenticated user.
+
+  - name: get_task
+    dependsOn:
+      - create_task
+    methods:
+      - name: get_task
+        params:
+          - name: task_id
+            type: int
+          - name: current_user
+            type: User
+        returns: Task
+        intent: Get a specific task by ID owned by or assigned to the current authenticated user.
+
+  - name: update_task
+    dependsOn:
+      - create_task
+    methods:
+      - name: update_task
+        params:
+          - name: task_id
+            type: int
+          - name: task_data
+            type: TaskUpdate
+          - name: current_user
+            type: User
+        returns: Task
+        intent: Update a task that belongs to a project owned by the current authenticated user.
+
+  - name: delete_task
+    dependsOn:
+      - create_task
+    methods:
+      - name: delete_task
+        params:
+          - name: task_id
+            type: int
+          - name: current_user
+            type: User
+        returns: None
+        intent: Delete a task by ID owned by the current authenticated user.
+
+jwtAuth:
+  secretEnv: JWT_SECRET
+  algorithm: HS256
+  accessTokenExpirationMinutes: 30
+  refreshTokenExpirationDays: 7
+
+rateLimiter:
+  backend: memory
+  defaultLimit: 100
+  windowSeconds: 60
+  perUser: true
+  redisUrlEnv: null
+
+kafka: null
+
+urlShortener: null
+
+
+apiGateway: null

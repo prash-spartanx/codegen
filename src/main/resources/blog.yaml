@@ -1,0 +1,308 @@
+name: blog-api
+
+description: >
+  A simple blogging REST API where authenticated users can write posts,
+  publish or unpublish them, and comment on posts. Authors can edit and delete
+  their own posts and comments.
+
+pythonVersion: "3.12"
+
+services:
+  - blog
+
+entities:
+  - name: User
+    fields:
+      - name: id
+        type: int
+        primaryKey: true
+        nullable: false
+        unique: true
+        defaultValue: null
+      - name: name
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+      - name: email
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: true
+        defaultValue: null
+      - name: password
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+    relationships:
+      - type: one_to_many
+        target: Post
+        field: posts
+      - type: one_to_many
+        target: Comment
+        field: comments
+
+  - name: Post
+    fields:
+      - name: id
+        type: int
+        primaryKey: true
+        nullable: false
+        unique: true
+        defaultValue: null
+      - name: title
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+      - name: content
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+      - name: is_published
+        type: bool
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: false
+      - name: author_id
+        type: int
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+    relationships:
+      - type: many_to_one
+        target: User
+        field: author
+      - type: one_to_many
+        target: Comment
+        field: comments
+
+  - name: Comment
+    fields:
+      - name: id
+        type: int
+        primaryKey: true
+        nullable: false
+        unique: true
+        defaultValue: null
+      - name: content
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+      - name: post_id
+        type: int
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+      - name: author_id
+        type: int
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+    relationships:
+      - type: many_to_one
+        target: Post
+        field: post
+      - type: many_to_one
+        target: User
+        field: author
+
+routers:
+  - name: auth
+    prefix: /auth
+    authRequired: false
+    dependsOn: []
+    endpoints:
+      - method: POST
+        path: /register
+        handler: register_user
+        requestBody: UserCreate
+        responseBody: UserResponse
+      - method: POST
+        path: /login
+        handler: login_user
+        requestBody: UserLogin
+        responseBody: TokenResponse
+
+  - name: posts
+    prefix: /posts
+    authRequired: true
+    dependsOn:
+      - auth
+    endpoints:
+      - method: POST
+        path: /
+        handler: create_post
+        requestBody: PostCreate
+        responseBody: PostResponse
+      - method: GET
+        path: /
+        handler: list_posts
+        requestBody: null
+        responseBody: PostListResponse
+      - method: GET
+        path: /{post_id}
+        handler: get_post
+        requestBody: null
+        responseBody: PostResponse
+      - method: PUT
+        path: /{post_id}
+        handler: update_post
+        requestBody: PostUpdate
+        responseBody: PostResponse
+      - method: DELETE
+        path: /{post_id}
+        handler: delete_post
+        requestBody: null
+        responseBody: null
+
+  - name: comments
+    prefix: /comments
+    authRequired: true
+    dependsOn:
+      - auth
+      - posts
+    endpoints:
+      - method: POST
+        path: /
+        handler: create_comment
+        requestBody: CommentCreate
+        responseBody: CommentResponse
+      - method: GET
+        path: /
+        handler: list_comments
+        requestBody: null
+        responseBody: CommentListResponse
+      - method: DELETE
+        path: /{comment_id}
+        handler: delete_comment
+        requestBody: null
+        responseBody: null
+
+serviceLogics:
+  - name: create_post
+    dependsOn: []
+    methods:
+      - name: create_post
+        params:
+          - name: post_data
+            type: PostCreate
+          - name: current_user
+            type: User
+        returns: Post
+        intent: Create a post authored by the current authenticated user.
+
+  - name: list_posts
+    dependsOn:
+      - create_post
+    methods:
+      - name: list_posts
+        params:
+          - name: current_user
+            type: User
+        returns: list[Post]
+        intent: Return all posts authored by the current user plus all published posts by other users.
+
+  - name: get_post
+    dependsOn:
+      - create_post
+    methods:
+      - name: get_post
+        params:
+          - name: post_id
+            type: int
+          - name: current_user
+            type: User
+        returns: Post
+        intent: Get a post by ID if it is published or authored by the current authenticated user.
+
+  - name: update_post
+    dependsOn:
+      - create_post
+    methods:
+      - name: update_post
+        params:
+          - name: post_id
+            type: int
+          - name: post_data
+            type: PostUpdate
+          - name: current_user
+            type: User
+        returns: Post
+        intent: Update a post authored by the current authenticated user, including toggling is_published.
+
+  - name: delete_post
+    dependsOn:
+      - create_post
+    methods:
+      - name: delete_post
+        params:
+          - name: post_id
+            type: int
+          - name: current_user
+            type: User
+        returns: None
+        intent: Delete a post authored by the current authenticated user.
+
+  - name: create_comment
+    dependsOn:
+      - create_post
+    methods:
+      - name: create_comment
+        params:
+          - name: comment_data
+            type: CommentCreate
+          - name: current_user
+            type: User
+        returns: Comment
+        intent: Add a comment to a post that is published or authored by the current user.
+
+  - name: list_comments
+    dependsOn:
+      - create_comment
+    methods:
+      - name: list_comments
+        params:
+          - name: current_user
+            type: User
+        returns: list[Comment]
+        intent: Return all comments written by the current user or made on posts authored by the current user.
+
+  - name: delete_comment
+    dependsOn:
+      - create_comment
+    methods:
+      - name: delete_comment
+        params:
+          - name: comment_id
+            type: int
+          - name: current_user
+            type: User
+        returns: None
+        intent: Delete a comment written by the current user or made on a post authored by the current user.
+
+jwtAuth:
+  secretEnv: JWT_SECRET
+  algorithm: HS256
+  accessTokenExpirationMinutes: 30
+  refreshTokenExpirationDays: 7
+
+rateLimiter: null
+
+kafka: null
+
+urlShortener: null
+
+apiGateway: null

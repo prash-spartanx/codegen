@@ -1,0 +1,314 @@
+name: expense-tracker-api
+
+description: >
+  A personal expense tracking REST API where authenticated users can create
+  spending categories and record expenses under those categories. Each user
+  only sees and manages their own categories and expenses.
+
+pythonVersion: "3.12"
+
+services:
+  - expense_tracking
+
+entities:
+  - name: User
+    fields:
+      - name: id
+        type: int
+        primaryKey: true
+        nullable: false
+        unique: true
+        defaultValue: null
+      - name: name
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+      - name: email
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: true
+        defaultValue: null
+      - name: password
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+      - name: currency
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: "USD"
+    relationships:
+      - type: one_to_many
+        target: Category
+        field: categories
+      - type: one_to_many
+        target: Expense
+        field: expenses
+
+  - name: Category
+    fields:
+      - name: id
+        type: int
+        primaryKey: true
+        nullable: false
+        unique: true
+        defaultValue: null
+      - name: name
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+      - name: user_id
+        type: int
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+    relationships:
+      - type: many_to_one
+        target: User
+        field: owner
+      - type: one_to_many
+        target: Expense
+        field: expenses
+
+  - name: Expense
+    fields:
+      - name: id
+        type: int
+        primaryKey: true
+        nullable: false
+        unique: true
+        defaultValue: null
+      - name: title
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+      - name: amount
+        type: float
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+      - name: note
+        type: str
+        primaryKey: false
+        nullable: true
+        unique: false
+        defaultValue: null
+      - name: category_id
+        type: int
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+      - name: user_id
+        type: int
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+    relationships:
+      - type: many_to_one
+        target: Category
+        field: category
+      - type: many_to_one
+        target: User
+        field: owner
+
+routers:
+  - name: auth
+    prefix: /auth
+    authRequired: false
+    dependsOn: []
+    endpoints:
+      - method: POST
+        path: /register
+        handler: register_user
+        requestBody: UserCreate
+        responseBody: UserResponse
+      - method: POST
+        path: /login
+        handler: login_user
+        requestBody: UserLogin
+        responseBody: TokenResponse
+
+  - name: categories
+    prefix: /categories
+    authRequired: true
+    dependsOn:
+      - auth
+    endpoints:
+      - method: POST
+        path: /
+        handler: create_category
+        requestBody: CategoryCreate
+        responseBody: CategoryResponse
+      - method: GET
+        path: /
+        handler: list_categories
+        requestBody: null
+        responseBody: CategoryListResponse
+      - method: DELETE
+        path: /{category_id}
+        handler: delete_category
+        requestBody: null
+        responseBody: null
+
+  - name: expenses
+    prefix: /expenses
+    authRequired: true
+    dependsOn:
+      - auth
+      - categories
+    endpoints:
+      - method: POST
+        path: /
+        handler: create_expense
+        requestBody: ExpenseCreate
+        responseBody: ExpenseResponse
+      - method: GET
+        path: /
+        handler: list_expenses
+        requestBody: null
+        responseBody: ExpenseListResponse
+      - method: GET
+        path: /{expense_id}
+        handler: get_expense
+        requestBody: null
+        responseBody: ExpenseResponse
+      - method: PUT
+        path: /{expense_id}
+        handler: update_expense
+        requestBody: ExpenseUpdate
+        responseBody: ExpenseResponse
+      - method: DELETE
+        path: /{expense_id}
+        handler: delete_expense
+        requestBody: null
+        responseBody: null
+
+serviceLogics:
+  - name: create_category
+    dependsOn: []
+    methods:
+      - name: create_category
+        params:
+          - name: category_data
+            type: CategoryCreate
+          - name: current_user
+            type: User
+        returns: Category
+        intent: Create a category owned by the current authenticated user.
+
+  - name: list_categories
+    dependsOn:
+      - create_category
+    methods:
+      - name: list_categories
+        params:
+          - name: current_user
+            type: User
+        returns: list[Category]
+        intent: Return all categories owned by the current authenticated user.
+
+  - name: delete_category
+    dependsOn:
+      - create_category
+    methods:
+      - name: delete_category
+        params:
+          - name: category_id
+            type: int
+          - name: current_user
+            type: User
+        returns: None
+        intent: Delete a category owned by the current authenticated user, along with its expenses.
+
+  - name: create_expense
+    dependsOn:
+      - create_category
+    methods:
+      - name: create_expense
+        params:
+          - name: expense_data
+            type: ExpenseCreate
+          - name: current_user
+            type: User
+        returns: Expense
+        intent: Record an expense under a category owned by the current authenticated user.
+
+  - name: list_expenses
+    dependsOn:
+      - create_expense
+    methods:
+      - name: list_expenses
+        params:
+          - name: current_user
+            type: User
+        returns: list[Expense]
+        intent: Return all expenses owned by the current authenticated user.
+
+  - name: get_expense
+    dependsOn:
+      - create_expense
+    methods:
+      - name: get_expense
+        params:
+          - name: expense_id
+            type: int
+          - name: current_user
+            type: User
+        returns: Expense
+        intent: Get a specific expense by ID owned by the current authenticated user.
+
+  - name: update_expense
+    dependsOn:
+      - create_expense
+    methods:
+      - name: update_expense
+        params:
+          - name: expense_id
+            type: int
+          - name: expense_data
+            type: ExpenseUpdate
+          - name: current_user
+            type: User
+        returns: Expense
+        intent: Update an expense owned by the current authenticated user, including moving it to another owned category.
+
+  - name: delete_expense
+    dependsOn:
+      - create_expense
+    methods:
+      - name: delete_expense
+        params:
+          - name: expense_id
+            type: int
+          - name: current_user
+            type: User
+        returns: None
+        intent: Delete an expense owned by the current authenticated user.
+
+jwtAuth:
+  secretEnv: JWT_SECRET
+  algorithm: HS256
+  accessTokenExpirationMinutes: 30
+  refreshTokenExpirationDays: 7
+
+rateLimiter: null
+
+kafka: null
+
+urlShortener: null
+
+apiGateway: null

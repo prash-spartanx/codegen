@@ -1,0 +1,83 @@
+name: TaskManager
+description: A simple task management API with JWT auth
+pythonVersion: "3.11"
+services:
+  - jwt_auth
+
+entities:
+  - name: User
+    fields:
+      - name: id
+        type: int
+        primaryKey: true
+        nullable: false
+        unique: true
+      - name: email
+        type: str
+        nullable: false
+        unique: true
+      - name: hashed_password
+        type: str
+        nullable: false
+    relationships:
+      - type: one_to_many
+        target: Task
+        field: tasks
+
+  - name: Task
+    fields:
+      - name: id
+        type: int
+        primaryKey: true
+        nullable: false
+        unique: true
+      - name: title
+        type: str
+        nullable: false
+      - name: completed
+        type: bool
+        nullable: false
+        defaultValue: "false"
+    relationships:
+      - type: many_to_one
+        target: User
+        field: owner
+
+routers:
+  - name: task_router
+    prefix: /tasks
+    authRequired: true
+    dependsOn:
+      - TaskService
+    endpoints:
+      - method: GET
+        path: /
+        handler: list_tasks
+        responseBody: "List[Task]"
+      - method: POST
+        path: /
+        handler: create_task
+        requestBody: "TaskCreate"
+        responseBody: "Task"
+
+serviceLogics:
+  - name: TaskService
+    dependsOn:
+      - Task
+    methods:
+      - name: list_tasks
+        params: []
+        returns: "List[Task]"
+        intent: "Return all tasks belonging to the current user"
+      - name: create_task
+        params:
+          - name: data
+            type: "TaskCreate"
+        returns: "Task"
+        intent: "Create a new task owned by the current user"
+
+jwtAuth:
+  secretEnv: JWT_SECRET
+  algorithm: HS256
+  accessTokenExpirationMinutes: 30
+  refreshTokenExpirationDays: 7

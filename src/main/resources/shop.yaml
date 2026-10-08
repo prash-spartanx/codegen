@@ -1,0 +1,376 @@
+name: shop-api
+
+description: >
+  A small online shop REST API. Anyone can browse the public product catalog.
+  Authenticated users can create products, save shipping addresses, place orders
+  for products, view their own orders, and cancel them. Order totals and status
+  are controlled by the server, never by the client.
+
+pythonVersion: "3.12"
+
+services:
+  - shop
+
+entities:
+  - name: User
+    fields:
+      - name: id
+        type: int
+        primaryKey: true
+        nullable: false
+        unique: true
+        defaultValue: null
+      - name: name
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+      - name: email
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: true
+        defaultValue: null
+      - name: password
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+      - name: role
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: "member"
+        readOnly: true
+    relationships:
+      - type: one_to_many
+        target: Address
+        field: addresses
+      - type: one_to_many
+        target: Order
+        field: orders
+
+  - name: Address
+    fields:
+      - name: id
+        type: int
+        primaryKey: true
+        nullable: false
+        unique: true
+        defaultValue: null
+      - name: street
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+      - name: city
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+      - name: user_id
+        type: int
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+    relationships:
+      - type: many_to_one
+        target: User
+        field: owner
+      - type: one_to_many
+        target: Order
+        field: orders
+
+  - name: Product
+    fields:
+      - name: id
+        type: int
+        primaryKey: true
+        nullable: false
+        unique: true
+        defaultValue: null
+      - name: name
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+      - name: price
+        type: float
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+      - name: stock
+        type: int
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: 0
+      - name: is_active
+        type: bool
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: true
+    relationships:
+      - type: one_to_many
+        target: Order
+        field: orders
+
+  - name: Order
+    fields:
+      - name: id
+        type: int
+        primaryKey: true
+        nullable: false
+        unique: true
+        defaultValue: null
+      - name: product_id
+        type: int
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+      - name: customer_id
+        type: int
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+      - name: shipping_address_id
+        type: int
+        primaryKey: false
+        nullable: true
+        unique: false
+        defaultValue: null
+      - name: quantity
+        type: int
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: 1
+      - name: total_price
+        type: float
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: 0.0
+        readOnly: true
+      - name: status
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: "placed"
+        readOnly: true
+    relationships:
+      - type: many_to_one
+        target: Product
+        field: product
+      - type: many_to_one
+        target: User
+        field: customer
+      - type: many_to_one
+        target: Address
+        field: shipping_address
+
+routers:
+  - name: auth
+    prefix: /auth
+    authRequired: false
+    dependsOn: []
+    endpoints:
+      - method: POST
+        path: /register
+        handler: register_user
+        requestBody: UserCreate
+        responseBody: UserResponse
+      - method: POST
+        path: /login
+        handler: login_user
+        requestBody: UserLogin
+        responseBody: TokenResponse
+
+  - name: catalog
+    prefix: /catalog
+    authRequired: false
+    dependsOn: []
+    endpoints:
+      - method: GET
+        path: /
+        handler: list_products
+        requestBody: null
+        responseBody: ProductListResponse
+      - method: GET
+        path: /{product_id}
+        handler: get_product
+        requestBody: null
+        responseBody: ProductResponse
+
+  - name: products
+    prefix: /products
+    authRequired: true
+    dependsOn:
+      - auth
+    endpoints:
+      - method: POST
+        path: /
+        handler: create_product
+        requestBody: ProductCreate
+        responseBody: ProductResponse
+
+  - name: addresses
+    prefix: /addresses
+    authRequired: true
+    dependsOn:
+      - auth
+    endpoints:
+      - method: POST
+        path: /
+        handler: add_address
+        requestBody: AddressCreate
+        responseBody: AddressResponse
+      - method: DELETE
+        path: /{address_id}
+        handler: delete_address
+        requestBody: null
+        responseBody: null
+
+  - name: orders
+    prefix: /orders
+    authRequired: true
+    dependsOn:
+      - auth
+      - catalog
+      - addresses
+    endpoints:
+      - method: POST
+        path: /
+        handler: place_order
+        requestBody: OrderCreate
+        responseBody: OrderResponse
+      - method: GET
+        path: /
+        handler: list_orders
+        requestBody: null
+        responseBody: OrderListResponse
+      - method: POST
+        path: /{order_id}/cancel
+        handler: cancel_order
+        requestBody: null
+        responseBody: OrderResponse
+
+serviceLogics:
+  - name: list_products
+    dependsOn: []
+    methods:
+      - name: list_products
+        params: []
+        returns: list[Product]
+        intent: Return all products that are active and have stock greater than zero. No authentication is needed.
+
+  - name: get_product
+    dependsOn: []
+    methods:
+      - name: get_product
+        params:
+          - name: product_id
+            type: int
+        returns: Product
+        intent: Get a product by ID from the catalog; return 404 if it does not exist. No authentication is needed.
+
+  - name: create_product
+    dependsOn: []
+    methods:
+      - name: create_product
+        params:
+          - name: product_data
+            type: ProductCreate
+          - name: current_user
+            type: User
+        returns: Product
+        intent: Create a product. Any authenticated user may do this.
+
+  - name: add_address
+    dependsOn: []
+    methods:
+      - name: add_address
+        params:
+          - name: address_data
+            type: AddressCreate
+          - name: current_user
+            type: User
+        returns: Address
+        intent: Add an address owned by the current authenticated user.
+
+  - name: delete_address
+    dependsOn:
+      - add_address
+    methods:
+      - name: delete_address
+        params:
+          - name: address_id
+            type: int
+          - name: current_user
+            type: User
+        returns: None
+        intent: Delete an address owned by the current authenticated user. Orders that used it are kept, with their shipping address cleared.
+
+  - name: place_order
+    dependsOn:
+      - create_product
+      - add_address
+    methods:
+      - name: place_order
+        params:
+          - name: order_data
+            type: OrderCreate
+          - name: current_user
+            type: User
+        returns: Order
+        intent: Place an order for the current user. The product must exist and be active, quantity must be at least 1 and not exceed the product stock, and if shipping_address_id is given it must belong to the current user. Set total_price to the product price times quantity, set status to placed, and decrease the product stock by the quantity.
+
+  - name: list_orders
+    dependsOn:
+      - place_order
+    methods:
+      - name: list_orders
+        params:
+          - name: current_user
+            type: User
+        returns: list[Order]
+        intent: Return all orders placed by the current authenticated user.
+
+  - name: cancel_order
+    dependsOn:
+      - place_order
+    methods:
+      - name: cancel_order
+        params:
+          - name: order_id
+            type: int
+          - name: current_user
+            type: User
+        returns: Order
+        intent: Cancel an order placed by the current user, set its status to cancelled and add the order quantity back to the product stock. Reject if the order is already cancelled.
+
+jwtAuth:
+  secretEnv: JWT_SECRET
+  algorithm: HS256
+  accessTokenExpirationMinutes: 30
+  refreshTokenExpirationDays: 7
+
+rateLimiter: null
+
+kafka: null
+
+urlShortener: null
+
+apiGateway: null

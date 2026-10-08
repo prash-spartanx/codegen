@@ -1,0 +1,17 @@
+target/
+.idea/
+*.iml
+.vscode/
+*.class
+*.log
+
+application.properties
+application-*.properties
+.env
+
+library-api/
+shop-api/
+shop2-api/
+ticket-api/
+
+test-output/

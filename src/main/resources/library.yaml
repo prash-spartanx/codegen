@@ -1,0 +1,434 @@
+name: library-api
+
+description: >
+  A library lending REST API where authenticated users can manage library
+  branches they run, add books to those branches, and borrow and return books.
+  Branch managers manage their branches and books; any user can borrow an
+  available book and sees only their own loans.
+
+pythonVersion: "3.12"
+
+services:
+  - library
+
+entities:
+  - name: User
+    fields:
+      - name: id
+        type: int
+        primaryKey: true
+        nullable: false
+        unique: true
+        defaultValue: null
+      - name: name
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+      - name: email
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: true
+        defaultValue: null
+      - name: password
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+      - name: is_active
+        type: bool
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: true
+      - name: max_loans
+        type: int
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: 3
+    relationships:
+      - type: one_to_many
+        target: Branch
+        field: branches
+      - type: one_to_many
+        target: Loan
+        field: loans
+
+  - name: Branch
+    fields:
+      - name: id
+        type: int
+        primaryKey: true
+        nullable: false
+        unique: true
+        defaultValue: null
+      - name: name
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+      - name: city
+        type: str
+        primaryKey: false
+        nullable: true
+        unique: false
+        defaultValue: null
+      - name: manager_id
+        type: int
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+    relationships:
+      - type: many_to_one
+        target: User
+        field: manager
+      - type: one_to_many
+        target: Book
+        field: books
+
+  - name: Book
+    fields:
+      - name: id
+        type: int
+        primaryKey: true
+        nullable: false
+        unique: true
+        defaultValue: null
+      - name: title
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+      - name: isbn
+        type: str
+        primaryKey: false
+        nullable: false
+        unique: true
+        defaultValue: null
+      - name: price
+        type: float
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: 0.0
+      - name: copies_available
+        type: int
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: 1
+      - name: shelf_code
+        type: str
+        primaryKey: false
+        nullable: true
+        unique: false
+        defaultValue: null
+      - name: branch_id
+        type: int
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+    relationships:
+      - type: many_to_one
+        target: Branch
+        field: branch
+      - type: one_to_many
+        target: Loan
+        field: loans
+
+  - name: Loan
+    fields:
+      - name: id
+        type: int
+        primaryKey: true
+        nullable: false
+        unique: true
+        defaultValue: null
+      - name: book_id
+        type: int
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+      - name: borrower_id
+        type: int
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: null
+      - name: due_days
+        type: int
+        primaryKey: false
+        nullable: false
+        unique: false
+        defaultValue: 14
+      - name: returned
+        type: bool
+        primaryKey: false
+        nullable: false
+        unique: false
+        readOnly: true
+        defaultValue: false
+    relationships:
+      - type: many_to_one
+        target: Book
+        field: book
+      - type: many_to_one
+        target: User
+        field: borrower
+
+routers:
+  - name: auth
+    prefix: /auth
+    authRequired: false
+    dependsOn: []
+    endpoints:
+      - method: POST
+        path: /register
+        handler: register_user
+        requestBody: UserCreate
+        responseBody: UserResponse
+      - method: POST
+        path: /login
+        handler: login_user
+        requestBody: UserLogin
+        responseBody: TokenResponse
+
+  - name: branches
+    prefix: /branches
+    authRequired: true
+    dependsOn:
+      - auth
+    endpoints:
+      - method: POST
+        path: /
+        handler: create_branch
+        requestBody: BranchCreate
+        responseBody: BranchResponse
+      - method: GET
+        path: /
+        handler: list_branches
+        requestBody: null
+        responseBody: BranchListResponse
+      - method: DELETE
+        path: /{branch_id}
+        handler: delete_branch
+        requestBody: null
+        responseBody: null
+
+  - name: books
+    prefix: /books
+    authRequired: true
+    dependsOn:
+      - auth
+      - branches
+    endpoints:
+      - method: POST
+        path: /
+        handler: create_book
+        requestBody: BookCreate
+        responseBody: BookResponse
+      - method: GET
+        path: /
+        handler: list_books
+        requestBody: null
+        responseBody: BookListResponse
+      - method: GET
+        path: /{book_id}
+        handler: get_book
+        requestBody: null
+        responseBody: BookResponse
+      - method: PATCH
+        path: /{book_id}
+        handler: update_book
+        requestBody: BookUpdate
+        responseBody: BookResponse
+      - method: DELETE
+        path: /{book_id}
+        handler: delete_book
+        requestBody: null
+        responseBody: null
+
+  - name: loans
+    prefix: /loans
+    authRequired: true
+    dependsOn:
+      - auth
+      - books
+    endpoints:
+      - method: POST
+        path: /
+        handler: create_loan
+        requestBody: LoanCreate
+        responseBody: LoanResponse
+      - method: GET
+        path: /
+        handler: list_loans
+        requestBody: null
+        responseBody: LoanListResponse
+      - method: POST
+        path: /{loan_id}/return
+        handler: return_loan
+        requestBody: null
+        responseBody: LoanResponse
+
+serviceLogics:
+  - name: create_branch
+    dependsOn: []
+    methods:
+      - name: create_branch
+        params:
+          - name: branch_data
+            type: BranchCreate
+          - name: current_user
+            type: User
+        returns: Branch
+        intent: Create a branch managed by the current authenticated user.
+
+  - name: list_branches
+    dependsOn:
+      - create_branch
+    methods:
+      - name: list_branches
+        params:
+          - name: current_user
+            type: User
+        returns: list[Branch]
+        intent: Return all branches managed by the current authenticated user.
+
+  - name: delete_branch
+    dependsOn:
+      - create_branch
+    methods:
+      - name: delete_branch
+        params:
+          - name: branch_id
+            type: int
+          - name: current_user
+            type: User
+        returns: None
+        intent: Delete a branch managed by the current authenticated user, along with its books.
+
+  - name: create_book
+    dependsOn:
+      - create_branch
+    methods:
+      - name: create_book
+        params:
+          - name: book_data
+            type: BookCreate
+          - name: current_user
+            type: User
+        returns: Book
+        intent: Add a book to a branch managed by the current authenticated user.
+
+  - name: list_books
+    dependsOn:
+      - create_book
+    methods:
+      - name: list_books
+        params:
+          - name: current_user
+            type: User
+        returns: list[Book]
+        intent: Return every book that has at least one copy available, from any branch.
+
+  - name: get_book
+    dependsOn:
+      - create_book
+    methods:
+      - name: get_book
+        params:
+          - name: book_id
+            type: int
+          - name: current_user
+            type: User
+        returns: Book
+        intent: Get a book by ID from any branch.
+
+  - name: update_book
+    dependsOn:
+      - create_book
+    methods:
+      - name: update_book
+        params:
+          - name: book_id
+            type: int
+          - name: book_data
+            type: BookUpdate
+          - name: current_user
+            type: User
+        returns: Book
+        intent: Update a book that belongs to a branch managed by the current authenticated user.
+
+  - name: delete_book
+    dependsOn:
+      - create_book
+    methods:
+      - name: delete_book
+        params:
+          - name: book_id
+            type: int
+          - name: current_user
+            type: User
+        returns: None
+        intent: Delete a book that belongs to a branch managed by the current authenticated user.
+
+  - name: create_loan
+    dependsOn:
+      - create_book
+    methods:
+      - name: create_loan
+        params:
+          - name: loan_data
+            type: LoanCreate
+          - name: current_user
+            type: User
+        returns: Loan
+        intent: Borrow a book for the current user if copies are available, the user is active, and the user has fewer active loans than max_loans; decrease copies_available by one.
+
+  - name: list_loans
+    dependsOn:
+      - create_loan
+    methods:
+      - name: list_loans
+        params:
+          - name: current_user
+            type: User
+        returns: list[Loan]
+        intent: Return all loans borrowed by the current authenticated user.
+
+  - name: return_loan
+    dependsOn:
+      - create_loan
+    methods:
+      - name: return_loan
+        params:
+          - name: loan_id
+            type: int
+          - name: current_user
+            type: User
+        returns: Loan
+        intent: Mark a loan borrowed by the current user as returned and increase the book's copies_available by one; reject if already returned.
+
+jwtAuth:
+  secretEnv: JWT_SECRET
+  algorithm: HS256
+  accessTokenExpirationMinutes: 30
+  refreshTokenExpirationDays: 7
+
+rateLimiter: null
+
+kafka: null
+
+urlShortener: null
+
+apiGateway: null

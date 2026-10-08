@@ -43,8 +43,72 @@ public class EntityModelGenerator {
             enrichedRel.put("target", rel.getTarget());
             enrichedRel.put("field", rel.getField());
 
-            String partnerField = findPartnerField(entity, rel, entityMap);
-            enrichedRel.put("partnerField", partnerField != null ? partnerField : "unknown");
+            String partnerField =
+                    findPartnerField(
+                            entity,
+                            rel,
+                            entityMap
+                    );
+
+// Leave as null when there is no inverse. The template will omit
+// back_populates entirely rather than emit back_populates="unknown",
+// which would raise AttributeError at configure time.
+            enrichedRel.put("partnerField", partnerField);
+
+// ------------------------------------------------------------
+// Ambiguous-FK detection.
+//
+// When this entity has more than one many_to_one (or one_to_one)
+// relationship targeting the same entity, SQLAlchemy cannot guess
+// which FK column belongs to which relationship. Each such
+// relationship must be given an explicit foreign_keys=[...] list.
+//
+// Example: Ticket has both reporter -> User and assignee -> User,
+// with reporter_id and assignee_id. Both need foreign_keys.
+// ------------------------------------------------------------
+            List<String> foreignKeys = null;
+
+            if ("many_to_one".equals(rel.getType())
+                    || "one_to_one".equals(rel.getType())) {
+
+                int sameTargetM2OCount = 0;
+
+                for (RelationshipSpec other : entity.getRelationships()) {
+
+                    if (other == rel) {
+                        continue;
+                    }
+
+                    if (!"many_to_one".equals(other.getType())
+                            && !"one_to_one".equals(other.getType())) {
+                        continue;
+                    }
+
+                    if (rel.getTarget().equals(other.getTarget())) {
+                        sameTargetM2OCount++;
+                    }
+                }
+
+                if (sameTargetM2OCount > 0) {
+
+                    String fkField =
+                            NamingUtils.resolveForeignKeyField(entity, rel);
+
+                    if (fkField != null) {
+                        foreignKeys = List.of(fkField);
+                    } else {
+                        System.err.println(
+                                "WARN: Ambiguous target '" + rel.getTarget()
+                                        + "' on " + entity.getName()
+                                        + "." + rel.getField()
+                                        + " but no FK column could be resolved. "
+                                        + "SQLAlchemy will fail at configure time."
+                        );
+                    }
+                }
+            }
+
+            enrichedRel.put("foreignKeys", foreignKeys);
 
 // Cascade is only correct when the child's FK back to us is NOT nullable.
 // Nullable FK means "child survives parent with FK set to NULL", which is

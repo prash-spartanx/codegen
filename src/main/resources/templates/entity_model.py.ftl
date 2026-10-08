@@ -108,15 +108,19 @@ class ${entity.name}(Base):
     <#list enrichedRelationships as rel>
         <#if rel.type == "one_to_many" || rel.type == "many_to_one" || rel.type == "many_to_many">
     ${rel.field} = relationship(
-        "${rel.target}",
-        back_populates="${rel.partnerField}"<#if rel.cascade?has_content>, cascade="${rel.cascade}"</#if>
+        "${rel.target}"<#if rel.partnerField?has_content>,
+        back_populates="${rel.partnerField}"</#if><#if rel.cascade?has_content>,
+        cascade="${rel.cascade}"</#if><#if rel.foreignKeys?has_content>,
+        foreign_keys=[<#list rel.foreignKeys as fk>${fk}<#if fk_has_next>, </#if></#list>]</#if>
     )
         <#elseif rel.type == "one_to_one">
     ${rel.field} = relationship(
         "${rel.target}",
-        uselist=False,
-        back_populates="${rel.partnerField}"
+        uselist=False<#if rel.partnerField?has_content>,
+        back_populates="${rel.partnerField}"</#if><#if rel.foreignKeys?has_content>,
+        foreign_keys=[<#list rel.foreignKeys as fk>${fk}<#if fk_has_next>, </#if></#list>]</#if>
     )
         </#if>
     </#list>
 </#if>
+

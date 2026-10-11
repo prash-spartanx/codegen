@@ -605,10 +605,6 @@ file that is wrong, and the container log.
 
 ---
 
-## 📄 License
-
-Add your license here (for example MIT) and include a `LICENSE` file in the repository.
-
 ---
 
 <div align="center">
